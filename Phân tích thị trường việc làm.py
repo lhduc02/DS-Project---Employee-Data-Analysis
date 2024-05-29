@@ -89,45 +89,51 @@ st.write("  ")
 
 
 # Mức lương và phúc lợi hiện tại
-st.header("Mức lương và phúc lợi hiện tại")
-data_salary = data.dropna(subset=['salary_min', 'salary_max'])
-data_salary['salary_min'] = pd.to_numeric(data_salary['salary_min'], errors='coerce')
-data_salary['salary_max'] = pd.to_numeric(data_salary['salary_max'], errors='coerce')
-# Tính toán lương trung bình
-data_salary['average_salary'] = (data_salary['salary_min'] + data_salary['salary_max']) / 2
-# Lọc dữ liệu để loại bỏ các hàng thiếu thông tin cần thiết
-filtered_data = data_salary.dropna(subset=['position_name', 'average_salary'])
-# Tính lương trung bình theo vị trí
-average_salary_by_position = filtered_data.groupby('position_name')['average_salary'].mean()
-job_counts_by_position = filtered_data['position_name'].value_counts()
-average_salary_and_counts = average_salary_by_position.reset_index()
-average_salary_and_counts.columns = ['Position', 'Average Salary']
-average_salary_and_counts['Job Count'] = average_salary_and_counts['Position'].map(job_counts_by_position)
-# Chuyển đổi tên công việc thành chữ thường để tìm kiếm
-filtered_data['job_title_lower'] = filtered_data['job_title_separated'].str.lower()
-count_junior = filtered_data[filtered_data['job_title_lower'].str.contains('junior', na=False)].groupby('position_name').size()
-count_middle = filtered_data[filtered_data['job_title_lower'].str.contains('middle', na=False)].groupby('position_name').size()
-count_senior = filtered_data[filtered_data['job_title_lower'].str.contains('senior', na=False)].groupby('position_name').size()
-count_lead = filtered_data[filtered_data['job_title_lower'].str.contains('lead', na=False)].groupby('position_name').size()
-# Thêm thông tin về số lượng vị trí công việc theo cấp độ
-average_salary_and_counts['Count Junior'] = average_salary_and_counts['Position'].map(count_junior).fillna(0).astype(int)
-average_salary_and_counts['Count Middle'] = average_salary_and_counts['Position'].map(count_middle).fillna(0).astype(int)
-average_salary_and_counts['Count Senior'] = average_salary_and_counts['Position'].map(count_senior).fillna(0).astype(int)
-average_salary_and_counts['Count Lead'] = average_salary_and_counts['Position'].map(count_lead).fillna(0).astype(int)
-average_salary_and_counts['Rest'] = (average_salary_and_counts['Job Count'] - average_salary_and_counts['Count Junior'] - average_salary_and_counts['Count Middle'] - average_salary_and_counts['Count Senior'] - average_salary_and_counts['Count Lead']).astype(int)
-average_salary_and_counts = average_salary_and_counts.dropna(subset=['Job Count']).sort_values(by='Job Count', ascending=False)
-average_salary_and_counts['Average Salary'] = average_salary_and_counts['Average Salary'].round(1)
+file_path = "D:\\.Repo\\Incomplete Project\\DS Project --- Labor market analysis\\cleaned_test.csv"
+data = pd.read_csv(file_path)
+# Loại bỏ các trường dữ liệu có salary_min hoặc salary_max bị null
+filtered_data = data.dropna(subset=['salary_min', 'salary_max'])
+# Tính lương trung bình cho mỗi công việc
+filtered_data['average_salary'] = (filtered_data['salary_min'] + filtered_data['salary_max']) / 2
+# Tính lương trung bình và số lượng công việc cho mỗi vị trí
+position_stats = filtered_data.groupby('position_name').agg(
+    avg_salary=('average_salary', 'mean'),
+    job_count=('job_title', 'count')
+).reset_index()
 
-average_salary_and_counts.columns = ['Position', 'Avg Salary', 'Cnt Job', 'Cnt Junior', 'Cnt Middle', 'Cnt Senior', 'Cnt Lead', 'Rest']
-top_10_positions = average_salary_and_counts.head(10)
-st.dataframe(top_10_positions.set_index('Position').reset_index())
+# Thêm cột đếm các cấp bậc
+filtered_data['cnt_senior'] = filtered_data['job_title_separated'].apply(lambda x: 1 if 'Senior' in str(x) else 0)
+filtered_data['cnt_middle'] = filtered_data['job_title_separated'].apply(lambda x: 1 if 'Middle' in str(x) else 0)
+filtered_data['cnt_junior'] = filtered_data['job_title_separated'].apply(lambda x: 1 if 'Junior' in str(x) else 0)
+# Tính tổng số lượng cho các cấp bậc theo mỗi vị trí
+position_counts = filtered_data.groupby('position_name').agg(
+    cnt_senior=('cnt_senior', 'sum'),
+    cnt_middle=('cnt_middle', 'sum'),
+    cnt_junior=('cnt_junior', 'sum')
+).reset_index()
+
+# Kết hợp các thống kê vị trí với số lượng các cấp bậc
+position_stats = position_stats.merge(position_counts, on='position_name')
+# Lấy top 10 vị trí theo số lượng công việc
+top_10_position_counts = position_stats.nlargest(10, 'job_count')
+# Hiển thị top 10 vị trí theo số lượng công việc
+st.subheader('Top 10 vị trí theo số lượng công việc')
+st.write(top_10_position_counts)
 
 
-fig, ax = plt.subplots(figsize=(10, 6)) # Biểu đồ cột
-ax.barh(top_10_positions['Position'], top_10_positions['Avg Salary'], color='lightgreen')
-ax.set_xlabel('Mức lương trung bình (USD)')
-ax.set_title('Top 10 vị trí có mức lương trung bình cao nhất')
-st.pyplot(fig)
+# Vẽ biểu đồ cột nằm cho lương trung bình
+st.subheader('Biểu đồ lương trung bình của top 10 vị trí theo số lượng công việc')
+plt.figure(figsize=(12, 6))
+sns.barplot(y='position_name', x='avg_salary', data=top_10_position_counts, orient='h')
+plt.xlabel('Lương trung bình')
+plt.ylabel('Tên vị trí')
+plt.title('Lương trung bình của top 10 vị trí theo số lượng công việc')
+st.pyplot(plt)
+
+# Hiển thị top 10 vị trí cùng số lượng các cấp bậc
+st.subheader('Số lượng các cấp bậc của top 10 vị trí')
+st.write(top_10_position_counts[['position_name', 'job_count', 'avg_salary', 'cnt_senior', 'cnt_middle', 'cnt_junior']])
+
 st.write(" ")
 st.write("  ")
 
@@ -251,13 +257,5 @@ ax.set_xticklabels(fresh_grad_counts.index, rotation=45, ha='right')
 st.pyplot(fig)
 st.write(" ")
 st.write("  ")
-
-
-
-
-
-
-
-
 
 
