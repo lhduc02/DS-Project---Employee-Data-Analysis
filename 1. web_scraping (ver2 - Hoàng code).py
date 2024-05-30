@@ -17,7 +17,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets"
 ]
 SPREADSHEET_ID = '1gR399rK5Ur_pT7ujvD7igOQQ6jYlwX9TQ3Ipv2HfUm0'
-RANGE_NAME = 'Sheet1'  
+RANGE_NAME = 'itviec'  
 
 if os.path.exists("C:/Users/admin/Desktop/python/itviec/token.json"):
     creds = Credentials.from_authorized_user_file("C:/Users/admin/Desktop/python/itviec/token.json", SCOPES)
@@ -36,7 +36,7 @@ sheet = service.spreadsheets()
 
 # Tài khoản itviec
 email = "rfd1894@gmail.com"
-password = "ABCDxyzt1234@@"
+password = ""
 service = Service(executable_path='C:/Users/admin/Desktop/python/itviec/chromedriver-win64/chromedriver.exe')
 
 options = uc.ChromeOptions() 
@@ -55,16 +55,16 @@ sign_in_button.click()
 
 # MySQL connection
 conn = mysql.connector.connect(
-    host="your_host",
-    user="your_user",
-    password="your_password",
-    database="your_database"
+    host="192.168.5.12",
+    user="datacrawl",
+    password="",
+    database="datacrawl"
 )
 cursor = conn.cursor()
 
 # Create table if not exists
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS jobs (
+    CREATE TABLE IF NOT EXISTS rawjobs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         job_title VARCHAR(255),
         href VARCHAR(255),
@@ -82,9 +82,9 @@ cursor.execute("""
     )
 """)
 
-today = datetime.now().strftime('%Y-%m-%d')
-
-for i in range(40, 0, -1):
+today = datetime.now()
+start_date = datetime(2024, 5, 13)
+for i in range(8, 0, -1):
     link_web = "https://itviec.com/viec-lam-it?job_selected=none&page=" + str(i)
     driver.get(link_web)
     driver.implicitly_wait(10)
@@ -112,26 +112,33 @@ for i in range(40, 0, -1):
             
             if "@type" in job_info and job_info["@type"] == "JobPosting":
                 job_title = job_info["title"]
-                job_salary = job_info.get("baseSalary", {})
-                min_salary = job_salary.get("value", {}).get("minValue")
-                max_salary = job_salary.get("value", {}).get("maxValue")
-                employmentType = soup.find('span', class_='normal-text text-rich-grey ms-1').text.strip()
-                company_link_a = soup.find('a', class_='hyperlink')
-                company_link = company_link_a.get('href') if company_link_a else ""
-                company_name = job_info["hiringOrganization"]["name"]
-                job_posted_date = job_info["datePosted"]
-                for location in job_info.get("jobLocation", []):
-                    addressRegion = location.get("address", {}).get("addressRegion")
-                    addressCountry = location.get("address", {}).get("addressCountry")
-                job_skills = job_info["skills"]
-                job_description = job_info["description"]
-                job_start_index = job_description.find("The Job")
-                your_skills_start_index = job_description.find("Your Skills and Experience")
-                your_skills_end_index = job_description.find("Why You'll Love Working Here")
-                job_description_job_part = job_description[job_start_index:your_skills_start_index]
-                job_description_skills_part = job_description[your_skills_start_index:your_skills_end_index]
+                job_posted_date_str = job_info["datePosted"]
                 
-                if job_posted_date == today:
+                job_posted_date = datetime.strptime(job_posted_date_str, '%Y-%m-%d')
+                
+                # Kiểm tra nếu ngày đăng trong khoảng từ start_date đến ngày hiện tại
+                if start_date <= job_posted_date <= today:
+                    # Tiếp tục xử lý công việc
+                    job_salary = job_info.get("baseSalary", {})
+                    min_salary = job_salary.get("value", {}).get("minValue")
+                    max_salary = job_salary.get("value", {}).get("maxValue")
+                    employmentType = soup.find('span', class_='normal-text text-rich-grey ms-1').text.strip()
+                    company_link_a = soup.find('a', class_='hyperlink')
+                    company_link = company_link_a.get('href') if company_link_a else ""
+                    company_name = job_info["hiringOrganization"]["name"]
+                    
+                    for location in job_info.get("jobLocation", []):
+                        addressRegion = location.get("address", {}).get("addressRegion")
+                        addressCountry = location.get("address", {}).get("addressCountry")
+                    
+                    job_skills = job_info["skills"]
+                    job_description = job_info["description"]
+                    job_start_index = job_description.find("The Job")
+                    your_skills_start_index = job_description.find("Your Skills and Experience")
+                    your_skills_end_index = job_description.find("Why You'll Love Working Here")
+                    job_description_job_part = job_description[job_start_index:your_skills_start_index]
+                    job_description_skills_part = job_description[your_skills_start_index:your_skills_end_index]
+                    
                     result = sheet.values().get(
                         spreadsheetId=SPREADSHEET_ID,
                         range=RANGE_NAME,
@@ -143,7 +150,7 @@ for i in range(40, 0, -1):
                     
                     data_to_upload = [
                         [job_title, href, min_salary, max_salary, employmentType, 
-                        job_posted_date, company_name, company_link, addressRegion, 
+                        job_posted_date_str, company_name, company_link, addressRegion, 
                         addressCountry, job_skills, job_description_job_part, 
                         job_description_skills_part]
                     ]
@@ -159,18 +166,19 @@ for i in range(40, 0, -1):
                     print("Job data" + f" {job_title}"+" uploaded successfully!")
                     
                     cursor.execute("""
-                        INSERT INTO jobs (
+                        INSERT INTO rawjobs (
                             job_title, href, min_salary, max_salary, employmentType, 
                             job_posted_date, company_name, company_link, addressRegion, 
                             addressCountry, job_skills, job_description_job_part, 
                             job_description_skills_part
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (job_title, href, min_salary, max_salary, employmentType, 
-                          job_posted_date, company_name, company_link, addressRegion, 
+                          job_posted_date_str, company_name, company_link, addressRegion, 
                           addressCountry, job_skills, job_description_job_part, 
                           job_description_skills_part))
                     conn.commit()
                     print("Job data" + f" {job_title}"+" inserted into MySQL successfully!")
+
 
     print('Finish Collected Page' + f' {i}')
 
