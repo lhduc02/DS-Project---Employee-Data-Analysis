@@ -11,7 +11,7 @@ Thu thập dữ liệu từ các web tìm việc và trực quan hóa dữ liệ
 + Chạy câu lệnh sau trên terminal để thực thi việc lấy dữ liệu: python3 code_crawl_data.py
 
 - Để chạy file "Phân tích thị trường việc làm.py":
-streamlit run "địa chỉ file Phân tích thị trường việc làm.py
+streamlit run "địa chỉ file Phân tích thị trường việc làm.py"
 
 Ví dụ: streamlit run "C:\Users\ADMIN\Documents\GitHub\Incomple_Project\DS Project --- Labor market analysis\Phân tích thị trường việc làm.py"
 
